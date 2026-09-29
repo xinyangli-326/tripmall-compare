@@ -44,7 +44,7 @@ const ev = async e => {
   return r.result && r.result.value;
 };
 
-for (let i = 0; i < 60; i++) { if (await ev("document.body.dataset.ready==='1'")) break; await sleep(250); }
+for (let i = 0; i < 80; i++) { if (await ev("!!(document.body&&document.body.dataset.ready==='1')")) break; await sleep(300); }
 const SCRIPT = argv.scriptfile ? fs.readFileSync(path.resolve(argv.scriptfile), "utf8") : argv.script;
 if (SCRIPT) { const r = await ev(SCRIPT); if (r !== undefined) console.log("script -> " + JSON.stringify(r)); }
 await sleep(Number(argv.wait || 900));

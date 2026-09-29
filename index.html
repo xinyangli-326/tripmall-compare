@@ -96,6 +96,7 @@ button{border:0;background:none;cursor:pointer}
 .csel:focus{border-color:var(--pri);box-shadow:0 0 0 3px rgba(21,84,192,.1)}
 .csel.active{border-color:var(--pri);color:var(--pri);background-color:#f6f9ff}
 .csel:disabled{opacity:.5;background:#f7f8fa}
+.advToggle{display:none}
 .lv1row,.lv2row{display:flex;align-items:center;gap:6px;width:100%;text-align:left;border-radius:8px;
   transition:.14s;color:var(--tx2)}
 .lv1row{margin-top:3px;padding:8px 9px;font-size:13px;font-weight:800;background:#f6f8fc}
@@ -180,6 +181,7 @@ button{border:0;background:none;cursor:pointer}
 .tiers:hover{background:var(--pri);border-color:var(--pri);color:#fff}
 .gohint{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--pri);opacity:.85}
 .rowb .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:0}
+.rowb .meta{display:contents}     /* 桌面端：三个数字仍是行网格的直接子项 */
 .rowb .pp{font-size:15px;font-weight:800;color:var(--tx)}
 .rowb .pp small{font-size:11.5px;color:var(--tx3);font-weight:600}
 .rowb .ppx{font-size:11px;color:var(--tx3);margin-top:3px}
@@ -511,6 +513,11 @@ mark{background:#fff3b0;color:inherit;border-radius:3px;padding:0 2px;box-shadow
 .toast{position:fixed;left:50%;bottom:70px;transform:translate(-50%,20px);background:#101828;color:#fff;border-radius:10px;
   padding:10px 18px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.24s;z-index:90}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+.datastatus{position:fixed;left:50%;top:14px;transform:translate(-50%,-160%);z-index:92;background:#101828;color:#fff;
+  border-radius:10px;padding:9px 16px;font-size:12.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.28);
+  transition:transform .3s cubic-bezier(.2,.9,.2,1);max-width:92vw;text-align:center}
+.datastatus.on{transform:translate(-50%,0)}
+.datastatus button{margin-left:8px;background:#fff;color:#101828;border-radius:7px;padding:4px 12px;font-size:12px;font-weight:800}
 /* 图片放大预览 */
 img.zoom{cursor:zoom-in}
 img.zoom:hover{box-shadow:0 0 0 2px var(--pri),0 4px 14px rgba(16,24,40,.2)}
@@ -539,12 +546,48 @@ img.zoom:hover{box-shadow:0 0 0 2px var(--pri),0 4px 14px rgba(16,24,40,.2)}
   .pane{margin-bottom:10px}
   .pane>.pbody{overflow:visible}
   .navlist{max-height:none}
-  .rowb{grid-template-columns:26px 1fr 40px;gap:8px;padding:9px 12px}
-  .rowb .uq{grid-column:2}
-  .rowb img{grid-row:1;grid-column:3;justify-self:end}
-  .rowb .sinfo,.rowb .sup{grid-column:2/-1}
-  .rowb .num{grid-column:2;text-align:left}
-  .rowb .num:before{content:attr(data-l);display:inline-block;min-width:64px;color:var(--tx3);font-size:11px;font-weight:600}
+  /* 手机端：紧凑 3 列，每行约 150px */
+  .rowb{grid-template-columns:26px minmax(0,1fr) 60px;gap:5px 9px;padding:11px 12px;align-items:start}
+  .rowb .pickcell{grid-column:1;grid-row:1/span 3;padding-top:3px}
+  .rowb .uq{grid-column:2;grid-row:1;text-align:left;flex-direction:row;align-items:baseline;gap:7px;flex-wrap:wrap}
+  .rowb .uq .v{font-size:20px}
+  .rowb .uq .u2{display:none}                 /* 「按每100毫升折算」手机上省掉 */
+  .rowb .simg{grid-column:3;grid-row:1/span 2;justify-self:end;align-self:start}
+  .rowb .sname{grid-column:2;grid-row:2;min-width:0}
+  .rowb .s1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .rowb .pname{display:none}                  /* 商品页名称手机上省掉 */
+  .rowb .meta{display:flex;grid-column:2/span 2;grid-row:3;gap:14px;flex-wrap:wrap;align-items:baseline}
+  .rowb .num{text-align:left;white-space:nowrap}
+  .rowb .num:before{content:attr(data-l);color:var(--tx3);font-size:10.5px;font-weight:600;margin-right:4px}
+  .rowb .ppx,.rowb .mqx{display:none}
+  .rowb .supcell{grid-column:2/span 2;grid-row:4;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap}
+  .rowb .s2row{flex-wrap:wrap;gap:7px}
+  .rowb img{width:60px;height:60px}
+  /* 再压一档：跳转只留一行、支付标签手机上省掉 */
+  .rowb .s1{font-size:13px;line-height:1.35}
+  .rowb .s2row{flex-wrap:nowrap;gap:6px;overflow:hidden}
+  .rowb .cta{font-size:11.5px;white-space:nowrap}
+  .rowb .paychips{display:none}
+  .rowb .supcell{font-size:12px}
+  .rowb .sup{font-size:12px}
+  .rowb .tiers{font-size:10.5px;padding:2px 7px}
+  .rowb .tbadge{font-size:10px;padding:1px 6px;margin-left:5px}
+  /* 顶栏瘦身：不换行、去掉重复搜索框与多余的说明 */
+  .top{padding:8px 10px}
+  .logo{font-size:14px;gap:7px;flex-wrap:nowrap}
+  .logo .mk{width:19px;height:19px;font-size:11px}
+  .logo .chip-brand{display:none}
+  .topsearch{display:none!important}
+  .topmeta{display:none}
+  /* 左栏：筛选与级联收进折叠里，默认只留搜索框 + 品类列表 */
+  .advToggle{display:block;width:calc(100% - 20px);margin:0 10px 8px;padding:7px;border:1px dashed #cdd8e8;
+    border-radius:8px;background:#f8fbff;color:var(--pri);font-size:12.5px;font-weight:700}
+  .navadv{display:none}
+  .navadv.show{display:block}
+  .navfilt{display:none}
+  .navadv.show .navfilt{display:flex}
+  .navlist{padding-top:0}
+  .thead,.theadtip,.hideM{display:none!important}
   .thead{display:none}
   .chead2{grid-template-columns:1fr}
   .chead2 .cband{display:none}
@@ -618,6 +661,8 @@ img.zoom:hover{box-shadow:0 0 0 2px var(--pri),0 4px 14px rgba(16,24,40,.2)}
           <button class="mini" data-f="pay" title="免房支付 / 预付分期 / 客房分成 / 0元购">特殊支付</button>
           <button class="mini" data-f="trial">可试用</button>
         </div>
+        <button class="advToggle" id="advToggle">筛选与分类 ▾</button>
+        <div class="navadv" id="navadv">
         <div class="cascade" style="padding-bottom:6px">
           <select id="selStar" class="csel" title="按适用酒店筛选">
             <option value="">适用酒店：全部</option>
@@ -632,6 +677,7 @@ img.zoom:hover{box-shadow:0 0 0 2px var(--pri),0 4px 14px rgba(16,24,40,.2)}
           <select id="selL1" class="csel" title="全部"></select>
           <select id="selL2" class="csel" title="全部"></select>
           <select id="selL3" class="csel" title="全部"></select>
+        </div>
         </div>
       </div>
       <div class="pbody"><div class="navlist" id="navlist"></div></div>
@@ -714,6 +760,7 @@ img.zoom:hover{box-shadow:0 0 0 2px var(--pri),0 4px 14px rgba(16,24,40,.2)}
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="datastatus" id="dataStatus"></div>
 <div class="lightbox" id="lightbox">
   <button class="x" id="lbClose">×</button>
   <img id="lbImg" alt="">
@@ -784,7 +831,7 @@ function starChip(pi,compact){
 /* ---------- 价格筛选（对数刻度双滑块） ---------- */
 const PRICE=new Map();     // ci -> [lo%, hi%]
 function priceBounds(c){
-  const vs=(byCat.get(c.i)||[]).map(i=>ROWS.rows[i]).filter(r=>r[6]==='rank').map(r=>r[5]);
+  const vs=(catRows(c.i)||[]).map(i=>ROWS.rows[i]).filter(r=>r[6]==='rank').map(r=>r[5]);
   if(vs.length<3) return null;
   return {lo:Math.min(...vs), hi:Math.max(...vs)};
 }
@@ -902,7 +949,7 @@ function openBasket(){
 function cheaperAlt(o){
   if(!o.catI&&o.catI!==0) return null;
   let best=null;
-  for(const ri of (byCat.get(o.catI)||[])){
+  for(const ri of (catRows(o.catI)||[])){
     const r=ROWS.rows[ri];
     if(r[6]!=='rank'||r[1]!==o.spec) continue;
     if(o.unit==null||!(r[5]<o.unit-1e-9)) continue;
@@ -1005,47 +1052,52 @@ let L1='', L2='', L3='';        // 三级级联下拉的选择（空=全部）
 let STAR='';                     // 适用酒店星级筛选（空=全部）
 let SKUSORT={col:'unit',dir:1};        // 表头排序：col + 方向(1升 / -1降)
 let MODE='cat', GQ='';                 // MODE: cat=看某品类 / search=全局搜索结果
+let ROWS_READY=false;                  // 明细数据（site-rows.json）是否已就绪
 const EXP=new Set();                   // 已展开档位明细的商品
 const CATQ=()=>$('#catq').value.trim();
 const nTiers=pI=>(byProd.get(pI)||[]).length;   // 该商品共几档（含拿样/按件）
 
 function idx(){
-  if(byCat) return;
+  if(byCat||!ROWS) return;          // 明细还没加载完就先不建索引
   byCat=new Map(); byProd=new Map();
   ROWS.rows.forEach((r,i)=>{
     const c=ROWS.prods[r[0]][2];
     if(!byCat.has(c)) byCat.set(c,[]);
-    byCat.get(c).push(i);
+    catRows(c).push(i);
     if(!byProd.has(r[0])) byProd.set(r[0],[]);
     byProd.get(r[0]).push(i);
   });
 }
+/* 安全取该品类的行索引（明细未就绪时返回空数组） */
+const catRows=ci=>(byCat&&byCat.get(ci))||[];
 function trialSet(){
+  if(!byCat) return new Set();
   if(_trialByCat) return _trialByCat;
   _trialByCat=new Set();
   for(const [ci,idxs] of byCat){ for(const ri of idxs) if(TRIAL.has(ROWS.rows[ri][0])){_trialByCat.add(ci);break;} }
   return _trialByCat;
 }
 function catThumb(c){
+  if(!ROWS_READY) return '';
   if(_ct.has(c.i)) return _ct.get(c.i);
   let img='',bv=1e9;
-  for(const ri of (byCat.get(c.i)||[])){const r=ROWS.rows[ri];
+  for(const ri of (catRows(c.i)||[])){const r=ROWS.rows[ri];
     if(r[6]!=='rank') continue; if(r[5]<bv){bv=r[5];img=ROWS.prods[r[0]][3]||'';}}
   _ct.set(c.i,img); return img;
 }
 function catHasTrial(c){ return c.trial>0 || trialSet().has(c.i); }
 function catCheapStart(c){
-  for(const ri of (byCat.get(c.i)||[])){const r=ROWS.rows[ri];
+  for(const ri of (catRows(c.i)||[])){const r=ROWS.rows[ri];
     if(r[6]==='rank'&&r[4]!=null&&Number(r[4])<=50) return true;}
   return false;
 }
 function catHasPay(c){
-  for(const ri of (byCat.get(c.i)||[])) if(hasPay(ROWS.rows[ri][0])) return true;
+  for(const ri of (catRows(c.i)||[])) if(hasPay(ROWS.rows[ri][0])) return true;
   return false;
 }
 function catHasStar(c){
   if(!STAR) return true;
-  for(const ri of (byCat.get(c.i)||[])) if(starOf(ROWS.rows[ri][0])===STAR) return true;
+  for(const ri of (catRows(c.i)||[])) if(starOf(ROWS.rows[ri][0])===STAR) return true;
   return false;
 }
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('on'),1900)};
@@ -1357,6 +1409,7 @@ function lv2Order(){
   return _lv2Order;
 }
 function renderNav(){
+  idx();
   renderCascade();
   const list=navList();
   const shown=slicePage('nav',list);
@@ -1387,13 +1440,19 @@ function selectCat(i){
 /* ================= 右：品类面板 ================= */
 function curCat(){ return SUM.cats.find(c=>c.i===CAT); }
 function renderCat(){
+  if(!ROWS_READY){
+    $('#cathead').innerHTML=''; $('#cattoolbar').innerHTML='';
+    $('#catbody').innerHTML='<div class="empty">正在加载明细数据…<br><span style="font-size:12px">首次打开要下载约 1.5MB（压缩后），之后有缓存就很快</span></div>';
+    $('#catfoot').innerHTML='';
+    return;
+  }
   if(MODE==='search'){ renderSearch(); return; }   // 全局搜索结果模式
   const c=curCat();
   if(!c){ $('#cathead').innerHTML=''; $('#cattoolbar').innerHTML=''; $('#catbody').innerHTML='<div class="empty">请选择左侧品类</div>'; $('#catfoot').innerHTML=''; return; }
   const bw=baseWords(c.base);
   const vs=c.rows.map(r=>r.min).filter(v=>v!=null);
   // 价格带的刻度点必须和筛选用同一个范围（全部可比规格的单价），否则两边对不上
-  const bandVals=(byCat.get(c.i)||[]).map(i=>ROWS.rows[i]).filter(r=>r[6]==='rank').map(r=>r[5]);
+  const bandVals=(catRows(c.i)||[]).map(i=>ROWS.rows[i]).filter(r=>r[6]==='rank').map(r=>r[5]);
   const cheapest=c.rows.find(r=>r.min!=null&&r.min===c.min);
   $('#cathead').innerHTML=`<div class="chead2">
     <div>
@@ -1412,7 +1471,7 @@ function renderCat(){
       <button data-v="sku" class="${VIEW==='sku'?'on':''}">按规格比价</button>
       <button data-v="sup" class="${VIEW==='sup'?'on':''}">按供应商看</button>
     </span>
-    ${VIEW==='sku'?`<span style="font-size:12px;color:var(--tx3)">点表头可排序</span>
+    ${VIEW==='sku'?`<span class="hideM" style="font-size:12px;color:var(--tx3)">点表头可排序</span>
     <div class="si"><svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <input id="skuq" value="${esc(Q)}" placeholder="在这个品类里找规格，如 43码"></div>`:''}
     <span class="cnt">${c.sups} 家供应商 · 比价口径 ${esc(bw.long)}</span>`;
@@ -1461,7 +1520,7 @@ function renderBody(){
     return;
   }
   // 按规格比价
-  const idxs=(byCat.get(c.i)||[]);
+  const idxs=(catRows(c.i)||[]);
   let rows=idxs.map(i=>ROWS.rows[i]).filter(r=>r[6]==='rank');
   const q=Q.trim().toLowerCase();
   if(q) rows=rows.filter(r=>String(r[1]).toLowerCase().includes(q)||String(ROWS.prods[r[0]][0]).toLowerCase().includes(q)||supName(ROWS.prods[r[0]][1]).toLowerCase().includes(q));
@@ -1533,8 +1592,8 @@ function skuRowHTML(r,rank,q,showCat){
       :'<svg viewBox="0 0 16 16" fill="none"><path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'}</button></span>
     <span class="uq"><span class="v">${fx(r[5])}<small>${esc(bw.long)}</small></span>
       ${rank===0&&!q&&isLowOrder?'<span class="badge b-low">品类最低价</span>':'<span class="u2">按'+esc(bw.long)+'折算</span>'}</span>
-    <span>${imgTag(r[8]||P[3],100,'zoom',esc(r[1]))}</span>
-    <span style="min-width:0">
+    <span class="simg">${imgTag(r[8]||P[3],100,'zoom',esc(r[1]))}</span>
+    <span class="sname">
       <span class="s1" data-tiers="${r[0]}" title="${esc(P[0])}">${showCat?`<span class="catpill">${esc(c.leaf)}</span>`:''}${hl(r[1],q)}${nt>1?`<button class="tbadge ${isExp?'on':''}" data-exp="${r[0]}" title="这个商品一共 ${nt} 个档位，点开看全部">共 ${nt} 档 <svg viewBox="0 0 16 16" fill="none"><path d="M4 6.5l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`:''}</span>
       ${TRIAL.has(r[0])?'<span class="badge b-trial" title="该商品有拿样/体验装档位，可不进比价单独买样">可0元试用</span>':''}
       <span class="s2row">
@@ -1544,9 +1603,11 @@ function skuRowHTML(r,rank,q,showCat){
         ${payChips(r[0],true)}
       </span>
     </span>
-    <span class="num pp" data-l="每件价">${fx(pp)}<small>/${esc(pw)}</small>${isPack?`<div class="ppx">整包 ${fx(lp)} · ${nf(packN)}${esc(pw)}/包</div>`:''}</span>
-    <span class="num mq" data-l="起订量">${r[4]==null?'—':nf(r[4])+' '+esc(pw)}${isPack?'<div class="mqx">按整包下单</div>':''}</span>
-    <span class="num lst" data-l="最少花">${fx(lp*mq)}</span>
+    <span class="meta">
+      <span class="num pp" data-l="每件价">${fx(pp)}<small>/${esc(pw)}</small>${isPack?`<div class="ppx">整包 ${fx(lp)} · ${nf(packN)}${esc(pw)}/包</div>`:''}</span>
+      <span class="num mq" data-l="起订量">${r[4]==null?'—':nf(r[4])+' '+esc(pw)}${isPack?'<div class="mqx">按整包下单</div>':''}</span>
+      <span class="num lst" data-l="最少花">${fx(lp*mq)}</span>
+    </span>
     <span class="supcell">
       <span class="sup">${esc(supName(P[1]))}</span>
       <button class="tiers" data-tiers="${r[0]}" title="看这个商品的全部档位">看档位 ›</button>
@@ -1900,6 +1961,10 @@ $('#palq').oninput=palRender;
 $('#pal').onclick=e=>{if(e.target.id==='pal')palClose()};
 $('#catq').oninput=()=>{PAGE.set('nav',1);renderNav();};
 $('#catsort').onchange=e=>{CATSORT=e.target.value;PAGE.set('nav',1);renderNav();saveState();};
+$('#advToggle').onclick=()=>{
+  const box=$('#navadv'), on=box.classList.toggle('show');
+  $('#advToggle').textContent = on ? '收起筛选 ▲' : '筛选与分类 ▾';
+};
 /* 三级级联：选一级 → 二级选项跟着变；选二级 → 三级选项跟着变；选三级 → 直接跳过去 */
 $('#selL1').onchange=e=>{ L1=e.target.value; L2=''; L3=''; PAGE.set('nav',1); renderNav(); saveState();
   if(L1){ const first=navList()[0]; if(first) selectCat(first.i); } };
@@ -1984,11 +2049,49 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ================= 载入 ================= */
-Promise.all([
-  fetch('data/site-summary.json').then(r=>r.json()),
-  fetch('data/site-rows.json').then(r=>r.json())
-]).then(([a,b])=>{ SUM=a; ROWS=b; TRIAL=new Set(b.trialProd||[]); TAGS=new Map(b.tags||[]); boot(); })
-  .catch(e=>{$('#topmeta').textContent='数据加载失败：'+e.message;});
+async function fetchJSON(url,tries){
+  tries=tries||3; let err;
+  for(let i=0;i<tries;i++){
+    try{
+      const r=await fetch(url,{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return await r.json();
+    }catch(e){ err=e; if(i<tries-1) await new Promise(z=>setTimeout(z,700*(i+1))); }
+  }
+  throw err;
+}
+function setDataStatus(txt,retry){
+  const el=$('#dataStatus'); if(!el) return;
+  el.classList.toggle('on',!!txt);
+  el.innerHTML = txt ? (retry?`${txt} <button id="dsRetry">重试</button>`:txt) : '';
+  if(retry&&$('#dsRetry')) $('#dsRetry').onclick=retry;
+}
+/* 先加载汇总（0.3MB）渲染外壳，再后台拉明细（6.6MB），手机上不会白屏 */
+(async function(){
+  try{
+    SUM=await fetchJSON('data/site-summary.json',4);
+  }catch(e){
+    $('#topmeta').textContent='汇总数据加载失败，请刷新重试';
+    setDataStatus('汇总数据加载失败：'+e.message, ()=>location.reload());
+    return;
+  }
+  boot();
+  loadRows();
+})();
+async function loadRows(){
+  setDataStatus('正在加载明细数据…（首次约 1~3 秒）');
+  try{
+    const b=await fetchJSON('data/site-rows.json',4);
+    ROWS=b; TRIAL=new Set(b.trialProd||[]); TAGS=new Map(b.tags||[]);
+    ROWS_READY=true;
+    idx();                            // 明细到手就建索引（否则列表会是空的）
+    setDataStatus('');
+    _trialByCat=null; _ct.clear();
+    if(CURV==='cats'){ if(MODE==='search') renderSearch(); else if(curCat()) renderCat(); }
+  }catch(e){
+    setDataStatus('明细数据加载失败（可能是网络不稳）：'+e.message, ()=>loadRows());
+  }
+}
 </script>
 </body>
 </html>
