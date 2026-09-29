@@ -1,0 +1,6 @@
+# 中间产物与调试脚本，不进仓库
+work/
+outputs/
+*.log
+*.tmp
+_ghtoken.txt
