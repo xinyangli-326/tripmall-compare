@@ -15,11 +15,15 @@ const TOKEN = (process.env.GHTOKEN || fs.readFileSync(TOKEN_FILE, "utf8")).trim(
 // 要推送的文件（相对路径 → 绝对路径）；跳过 work/ 等中间物
 const INCLUDE = [
   "index.html", "README.md", ".gitignore", "server.mjs",
-  "data/site-summary.json", "data/site-rows.json", "data/raw-specs.json", "data/raw-pay.json",
+  "data/site-summary.json", "data/search.json",
   "tools/fold.mjs", "tools/build-site.mjs", "tools/fetch-specs-full.mjs",
   "tools/fetch-pay.mjs", "tools/audit.mjs", "tools/report.mjs", "tools/shoot.mjs",
   "tools/push-github.mjs",
 ];
+// 品细分片（data/cat/*.json）自动全部带上
+const catDir = path.join(ROOT, "data", "cat");
+if (fs.existsSync(catDir)) fs.readdirSync(catDir).filter(f => f.endsWith(".json"))
+  .forEach(f => INCLUDE.push("data/cat/" + f));
 
 const API = "https://api.github.com";
 const H = { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "Content-Type": "application/json", "User-Agent": "tripmall-compare" };

@@ -67,7 +67,7 @@ for (const pid of ids) {
   const payBits = (p.freeRoom ? "1" : "0") + (p.prepay ? "1" : "0") + (p.commission ? "1" : "0") + (p.zeroBuy ? "1" : "0");
   const starProp = (v.p || []).find(x => /适用酒店/.test(String(x[0] || "")));
   const star = starProp ? String(starProp[1] || "").trim() : "";
-  prods.push([(db[pid] && db[pid].name) || v.n, sI, cI, v.img || (db[pid] && db[pid].image) || "", v.sales || (db[pid] && db[pid].sales) || "", pid, payBits, star]);
+  prods.push([(db[pid] && db[pid].name) || v.n, sI, cI, v.img || (db[pid] && db[pid].image) || "", v.sales || (db[pid] && db[pid].sales) || "", pid, payBits, star, 0]);
   prodIdx.set(pid, pI);
   if (cc.tags.length) tags.push([pI, cc.tags[0]]);
   stats.products++;
@@ -195,9 +195,20 @@ const summary = {
     const spread = (vs.length >= 8 && qf(0.1) > 0) ? qf(0.9) / qf(0.1) : null;
     const spreadFull = vs.length >= 2 ? vs[vs.length - 1] / vs[0] : null;
     const p50 = qf(0.5);
+    // 每个品类自带：代表图 / 是否有特殊支付 / 是否小批量可买 / 出现过的星级（供导航筛选，免加载明细）
+    let thumb = "", hasPay = false, cheapStart = false;
+    const starSet = new Set();
+    for (const ri of (catRows.get(i) || [])) {
+      const r = rows[ri], P = prods[r[0]];
+      if (!thumb && P[3]) thumb = P[3];
+      if (/[1]/.test(P[6] || "0000")) hasPay = true;
+      if (r[6] === "rank" && r[4] != null && Number(r[4]) <= 50) cheapStart = true;
+      if (P[7]) starSet.add(P[7]);
+    }
+    if (!thumb && sups.length && sups[0].best && sups[0].best.img) thumb = sups[0].best.img;
     return { i, leaf, lv2: catLv2.get(leaf) || "其他", base: baseOf(leaf).label, baseCode: baseOf(leaf).code,
       sups: st.sups.size, skus: st.skus, rankable: st.rankable, trial: st.trial, min: st.min,
-      spread, spreadFull, p50, rows: sups };
+      spread, spreadFull, p50, rows: sups, thumb, hasPay, cheapStart, stars: [...starSet] };
   }),
   sups: supList.map((name, i) => ({ name, prods: supStat[i].prods, skus: supStat[i].skus, cats: supStat[i].catSet.size, trial: supStat[i].trial })),
 };
@@ -205,18 +216,48 @@ const summary = {
 // 展示顺序按"能比价的规格数"降序；c.i 永远是原始编号，与 site-rows 的行索引保持一致
 summary.cats.sort((a, b) => b.rankable - a.rankable);
 
-const siteRows = { cats: catList, sups: supList, prods, rows, trialProd: [...trialProd], tags };
-
+/* ---------- 分片输出：首屏只加载汇总，每个品类一个小文件 ---------- */
 const outDir = path.join(ROOT, "data");
-fs.mkdirSync(outDir, { recursive: true });
+const catDir = path.join(outDir, "cat");
+fs.mkdirSync(catDir, { recursive: true });
+
+// 每个品类：它自己的商品 + 行
+const byCatRows = new Map(), byCatProds = new Map();
+for (let i = 0; i < rows.length; i++) {
+  const ci = prods[rows[i][0]][2];
+  if (!byCatRows.has(ci)) { byCatRows.set(ci, []); byCatProds.set(ci, new Set()); }
+  byCatRows.get(ci).push(rows[i]);
+  byCatProds.get(ci).add(rows[i][0]);
+}
+let catBytes = 0, maxBytes = 0, maxCi = 0;
+for (let ci = 0; ci < catList.length; ci++) {
+  const rs = byCatRows.get(ci) || [];
+  const pset = byCatProds.get(ci) || new Set();
+  const pobj = {}; pset.forEach(pi => pobj[pi] = prods[pi]);
+  const tp = [...trialProd].filter(pi => pset.has(pi));
+  const p = path.join(catDir, ci + ".json");
+  fs.writeFileSync(p, JSON.stringify({ prods: pobj, rows: rs, trialProd: tp }));
+  const sz = fs.statSync(p).size; catBytes += sz;
+  if (sz > maxBytes) { maxBytes = sz; maxCi = ci; }
+}
+
+// 搜索索引：商品名（紧凑 TSV，后台加载）。规格名搜索在品类内做，避免索引过大
+const idxLines = [];
+prods.forEach((P, pi) => { if (P[0]) idxLines.push(P[0] + "\t" + P[2] + "\t" + P[1] + "\t" + pi); });
+fs.writeFileSync(path.join(outDir, "search.txt"), idxLines.join("\n"));
+
 const w = (f, o) => { const p = path.join(outDir, f); fs.writeFileSync(p, JSON.stringify(o)); return [f, (fs.statSync(p).size / 1048576).toFixed(2) + "MB"]; };
 const a = w("site-summary.json", summary);
-const b = w("site-rows.json", siteRows);
+const b = ["search.txt", (fs.statSync(path.join(outDir, "search.txt")).size / 1048576).toFixed(2) + "MB"];
+fs.writeFileSync(path.join(outDir, "site-rows.json"), JSON.stringify({
+  cats: catList, sups: supList, prods, rows, trialProd: [...trialProd], tags
+}));   // 仍保留全量单文件，供本地/全量分析用（网页不再加载它）
 
 console.log("===== 站点数据已生成 =====");
 console.log(JSON.stringify(summary.stats, null, 1));
-console.log(`${a[0]}  ${a[1]}`);
-console.log(`${b[0]}  ${b[1]}`);
+console.log(`${a[0]}  ${a[1]}    ← 首屏只加载这个`);
+console.log(`data/cat/  ${catList.length} 个文件  平均 ${(catBytes / catList.length / 1024).toFixed(0)}KB  最大 ${(maxBytes / 1024).toFixed(0)}KB(${catList[maxCi]})`);
+console.log(`${b[0]}  ${b[1]}    ← 全局搜索索引（后台加载）`);
 console.log("\n类目 TOP10（按可比价行数）：");
 summary.cats.slice(0, 10).forEach(c => console.log("  " + c.leaf.padEnd(14) + c.base.padEnd(9) + " 供应商" + String(c.sups).padStart(3) + " 可比价行" + String(c.rankable).padStart(5) + " 最低" + (c.min == null ? "-" : c.min.toFixed(4))));
 

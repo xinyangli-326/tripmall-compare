@@ -450,6 +450,15 @@ mark{background:#fff3b0;color:inherit;border-radius:3px;padding:0 2px;box-shadow
 .cartfab .cnt{font-size:11px;font-weight:800;background:#ffd166;color:#7a3d00;border-radius:9px;padding:1px 7px;min-width:20px;text-align:center;line-height:1.5}
 .cartfab .sum{font-size:10.5px;font-weight:700;color:#cfe0ff;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cartfab.empty .lb{color:#e3e9f2}
+/* 全局搜索结果（索引驱动） */
+.srchgrp{padding:11px 14px 6px;font-size:11.5px;font-weight:800;color:var(--tx3);letter-spacing:.4px;
+  background:#f7f9fc;border-bottom:1px solid var(--line2);border-top:1px solid var(--line2)}
+.sritem{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line2);cursor:pointer;transition:.13s}
+.sritem:hover{background:var(--pri-bg)}
+.sritem .tx{flex:1;min-width:0}
+.sritem .a{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sritem .b{font-size:11.5px;color:var(--tx3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sritem .c{font-size:12.5px;font-weight:800;color:var(--ok);white-space:nowrap}
 /* 适用酒店星级标签 */
 .starchip{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;border-radius:6px;padding:1.5px 6px;
   background:#fff4e0;color:#a35a00;border:1px solid #f5d9a8;white-space:nowrap;line-height:1.4}
@@ -1045,7 +1054,8 @@ function pagerHTML(k,total,unit){
 const slicePage=(k,arr)=>{const per=perOf(k),p=pageOf(k,arr.length);return arr.slice((p-1)*per,p*per);};
 
 /* ---------- 状态 ---------- */
-let SUM=null,ROWS=null,TRIAL=new Set(),TAGS=new Map();
+let SUM=null,ROWS={prods:[],rows:[]},TRIAL=new Set(),TAGS=new Map();
+const LOADED=new Set();          // 已加载明细的品类
 let byCat=null,byProd=null,_trialByCat=null,_ct=new Map();
 let LV2='ALL', CATSORT='cat', CAT=null, Q='', VIEW='sku', SUPSORT='ratio';
 let L1='', L2='', L3='';        // 三级级联下拉的选择（空=全部）
@@ -1053,21 +1063,41 @@ let STAR='';                     // 适用酒店星级筛选（空=全部）
 let SKUSORT={col:'unit',dir:1};        // 表头排序：col + 方向(1升 / -1降)
 let MODE='cat', GQ='';                 // MODE: cat=看某品类 / search=全局搜索结果
 let ROWS_READY=false;                  // 明细数据（site-rows.json）是否已就绪
+let SEARCH_IDX=null;                   // 全局搜索索引 [[文本, 0商品/1规格, 品类, 商品, 供应商]]
 const EXP=new Set();                   // 已展开档位明细的商品
 const CATQ=()=>$('#catq').value.trim();
 const nTiers=pI=>(byProd.get(pI)||[]).length;   // 该商品共几档（含拿样/按件）
 
 function idx(){
-  if(byCat||!ROWS) return;          // 明细还没加载完就先不建索引
-  byCat=new Map(); byProd=new Map();
-  ROWS.rows.forEach((r,i)=>{
-    const c=ROWS.prods[r[0]][2];
-    if(!byCat.has(c)) byCat.set(c,[]);
-    catRows(c).push(i);
-    if(!byProd.has(r[0])) byProd.set(r[0],[]);
-    byProd.get(r[0]).push(i);
-  });
+  if(!byCat){ byCat=new Map(); byProd=new Map(); }
 }
+/* 按品类懒加载明细分片 */
+async function ensureCat(ci){
+  if(LOADED.has(ci)) return true;
+  setDataStatus('正在加载该品类明细…');
+  try{
+    const d=await fetchJSON('data/cat/'+ci+'.json',3);
+    Object.keys(d.prods||{}).forEach(k=>{ ROWS.prods[+k]=d.prods[k]; });
+    const start=ROWS.rows.length;
+    (d.rows||[]).forEach(r=>ROWS.rows.push(r));
+    (d.trialProd||[]).forEach(pi=>TRIAL.add(pi));
+    idx();
+    for(let i=start;i<ROWS.rows.length;i++){
+      const r=ROWS.rows[i], c=catRows_of(r[0]);
+      if(!byCat.has(c)) byCat.set(c,[]);
+      byCat.get(c).push(i);
+      if(!byProd.has(r[0])) byProd.set(r[0],[]);
+      byProd.get(r[0]).push(i);
+    }
+    LOADED.add(ci);
+    setDataStatus('');
+    return true;
+  }catch(e){
+    setDataStatus('该品类数据加载失败：'+e.message, ()=>{ ensureCat(ci).then(ok=>ok&&renderCat()); });
+    return false;
+  }
+}
+const catRows_of=pi=>ROWS.prods[pi][2];
 /* 安全取该品类的行索引（明细未就绪时返回空数组） */
 const catRows=ci=>(byCat&&byCat.get(ci))||[];
 function trialSet(){
@@ -1078,6 +1108,7 @@ function trialSet(){
   return _trialByCat;
 }
 function catThumb(c){
+  if(c&&c.thumb) return c.thumb;
   if(!ROWS_READY) return '';
   if(_ct.has(c.i)) return _ct.get(c.i);
   let img='',bv=1e9;
@@ -1086,20 +1117,9 @@ function catThumb(c){
   _ct.set(c.i,img); return img;
 }
 function catHasTrial(c){ return c.trial>0 || trialSet().has(c.i); }
-function catCheapStart(c){
-  for(const ri of (catRows(c.i)||[])){const r=ROWS.rows[ri];
-    if(r[6]==='rank'&&r[4]!=null&&Number(r[4])<=50) return true;}
-  return false;
-}
-function catHasPay(c){
-  for(const ri of (catRows(c.i)||[])) if(hasPay(ROWS.rows[ri][0])) return true;
-  return false;
-}
-function catHasStar(c){
-  if(!STAR) return true;
-  for(const ri of (catRows(c.i)||[])) if(starOf(ROWS.rows[ri][0])===STAR) return true;
-  return false;
-}
+function catCheapStart(c){ return !!c.cheapStart; }
+function catHasPay(c){ return !!c.hasPay; }
+function catHasStar(c){ return !STAR || (c.stars||[]).includes(STAR); }
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('on'),1900)};
 
 /* ---------- 术语 ---------- */
@@ -1172,17 +1192,25 @@ function homeSuggest(q){
     .forEach(c=>out.push({type:'cat',i:c.i,label:c.leaf,
       sub:`${c.sups} 家供应商 · ${nf(c.rankable)} 个可比规格`,
       right:c.min==null?'':fx(c.min)+baseWords(c.base).long}));
-  let n=0;
-  for(let i=0;i<ROWS.rows.length&&n<7;i++){
-    const r=ROWS.rows[i]; if(r[6]!=='rank') continue;
-    const P=ROWS.prods[r[0]], c=SUM.cats.find(x=>x.i===P[2]);
-    if(!(String(r[1]).toLowerCase().includes(ql)||String(P[0]).toLowerCase().includes(ql))) continue;
-    out.push({type:'sku',pI:r[0],cat:c.i,label:r[1],
-      sub:`${c.leaf} · ${supName(P[1])} · ${fx(parseFloat(r[2]))}/${pieceWord(r[1])}`,
-      right:fx(r[5])+'/'+baseWords(c.base).short});
-    n++;
+  if(SEARCH_IDX){
+    let n=0;
+    for(let i=0;i<SEARCH_IDX.length&&n<8;i++){
+      const e=SEARCH_IDX[i];
+      if(!String(e[0]).toLowerCase().includes(ql)) continue;
+      const c=SUM.cats.find(x=>x.i===e[1]); if(!c) continue;
+      out.push({type:'hit',catI:e[1],prodI:e[3],supI:e[2],label:e[0],kind:0,
+        sub:`${c.leaf} · ${supName(e[2])}`});
+      n++;
+    }
   }
   return out;
+}
+function pickHit(s,q){
+  Q=q||'';                 // 进品类后自动用关键词过滤
+  selectCat(s.catI,true);
+  tab('cats');
+  $('#hdrop').classList.remove('on'); $('#tdrop').classList.remove('on');
+  setTimeout(()=>{ const box=$('#catbody'); if(box) box.scrollTop=0; },60);
 }
 /* ---------- 搜索历史（localStorage） ---------- */
 const HKEY='tm_search_hist_v1';
@@ -1280,7 +1308,8 @@ function renderHDrop(){
 function pickSug(i){
   const s=HSUG[i]; if(!s) return;
   histAdd($('#hq').value.trim()||s.label);      // 记「你输入的内容」，不是商品名
-  selectCat(s.type==='cat'?s.i:s.cat); tab('cats');
+  if(s.type==='cat'){ selectCat(s.i); tab('cats'); }
+  else pickHit(s,$('#hq').value.trim());
   $('#hdrop').classList.remove('on');
 }
 function homeGo(q){
@@ -1327,36 +1356,44 @@ function restoreState(){
 function showSearch(q){ MODE='search'; GQ=q; Q=q; PAGE.set('gsearch',1); renderNav(); renderCat(); saveState(); }
 function renderSearch(){
   const q=GQ.trim(), ql=q.toLowerCase();
-  const rows=[];
-  for(let i=0;i<ROWS.rows.length;i++){
-    const r=ROWS.rows[i]; if(r[6]!=='rank') continue;
-    const P=ROWS.prods[r[0]];
-    if(String(r[1]).toLowerCase().includes(ql)||String(P[0]).toLowerCase().includes(ql)||supName(P[1]).toLowerCase().includes(ql)) rows.push(r);
+  const hits=[]; let total=0;
+  if(SEARCH_IDX){
+    for(let i=0;i<SEARCH_IDX.length;i++){
+      const e=SEARCH_IDX[i];
+      if(!String(e[0]).toLowerCase().includes(ql)) continue;
+      total++;
+      if(hits.length<200) hits.push(e);
+    }
   }
-  const beforeStar=rows.length;
-  if(STAR) rows=rows.filter(r=>starOf(r[0])===STAR);
-  rows=sortSkuRows(rows);
+  const catHits=[...new Set(hits.map(e=>e[1]))].map(ci=>SUM.cats.find(c=>c.i===ci)).filter(Boolean)
+    .sort((a,b)=>b.rankable-a.rankable).slice(0,8);
   $('#cathead').innerHTML=`<div class="chead2">
     <div><div class="t">「${esc(q)}」的搜索结果</div>
-      <div class="m"><span>共 <b>${nf(rows.length)}</b> 个可比规格</span><span>跨品类 · 按换算单价从低到高</span>
-        ${STAR?`<span class="factive" data-clearstar="1">适用酒店 ${esc(STAR)} ✕</span>`:(beforeStar!==rows.length?'':'')}</div></div>
+      <div class="m"><span>命中 <b>${nf(total)}</b> 个商品 / 规格</span><span>覆盖 <b>${catHits.length}</b> 个品类</span>
+        ${SEARCH_IDX?'':'<span class="badge b-warn">搜索索引加载中…</span>'}</div></div>
     <div><button class="ibtn" id="backToCat">返回品类浏览</button></div>
     <div class="cband"></div></div>`;
-  $('#cattoolbar').innerHTML=`<span class="flabel">提示</span>
-    <span style="font-size:12.5px;color:var(--tx3)">每行前面的蓝色标签是对应品类；点「看档位」看同一商品的其它档位。</span>
-    <span class="cnt">共 ${nf(rows.length)} 条</span>`;
+  $('#cattoolbar').innerHTML=`<span class="flabel">点结果直接进入对应品类（并自动按关键词过滤）</span><span class="cnt">共 ${nf(total)} 条</span>`;
   $('#backToCat').onclick=()=>{ MODE='cat'; Q=''; selectCat(CAT!=null?CAT:(SUM.cats[0]||{}).i); };
-  const key='gsearch', total=rows.length;
-  $('#catbody').classList.add('flexbody');
-  if(!total){
-    $('#catbody').classList.remove('flexbody');
-    $('#catbody').innerHTML='<div class="empty">没有找到匹配「'+esc(q)+'」的规格<br><span style="font-size:12px">换个词试试，或点「返回品类浏览」</span></div>';
-    $('#catfoot').innerHTML=pagerHTML(key,0,'个规格'); return;
+  $('#catbody').classList.remove('flexbody');
+  if(!hits.length){
+    $('#catbody').innerHTML='<div class="empty">没有找到匹配「'+esc(q)+'」的商品或规格<br><span style="font-size:12px">换个词试试，或点「返回品类浏览」</span></div>';
+    $('#catfoot').innerHTML=''; return;
   }
-  const shown=slicePage(key,rows), baseIdx=(pageOf(key,total)-1)*perOf(key);
-  $('#catbody').innerHTML=`${skuTheadHTML()}
-    <div class="rowsbox">`+shown.map((r,i)=>skuRowHTML(r,baseIdx+i,q,true)).join('')+`</div>`;
-  $('#catfoot').innerHTML=pagerHTML(key,total,'个规格');
+  $('#catbody').innerHTML=
+    (catHits.length?`<div class="srchgrp">相关品类</div>`+catHits.map(c=>`<div class="sritem" data-srcat="${c.i}">
+        <span class="catpill">品类</span><div class="tx"><div class="a">${esc(c.leaf)}</div>
+        <div class="b">${c.sups} 家供应商 · ${nf(c.rankable)} 个可比规格</div></div>
+        <div class="c">${c.min==null?'':fx(c.min)+baseWords(c.base).long}</div></div>`).join(''):'')
+    +`<div class="srchgrp">商品 / 规格命中</div>`
+    + hits.map(e=>{ const c=SUM.cats.find(x=>x.i===e[1]);
+        return `<div class="sritem" data-srcat="${e[1]}">
+          <span class="catpill">商品</span>
+          <div class="tx"><div class="a">${esc(e[0])}</div>
+          <div class="b">${esc(c?c.leaf:'')} · ${esc(supName(e[2]))}</div></div>
+          <div class="c">去看 ›</div></div>`; }).join('');
+  $('#catfoot').innerHTML=total>hits.length?`<div class="pgbar"><span>只展示前 ${hits.length} 条，输入更具体的关键词可缩小范围</span></div>`:'';
+  $$('#catbody .sritem').forEach(el=>el.onclick=()=>{ Q=q; selectCat(+el.dataset.srcat); });
 }
 
 /* ================= 左：品类导航 ================= */
@@ -1425,13 +1462,15 @@ function renderNav(){
   $$('#navlist .nitem').forEach(b=>b.onclick=()=>selectCat(+b.dataset.c));
   if(CAT==null||!list.some(c=>c.i===CAT)){ if(shown.length) selectCat(shown[0].i); }
 }
-function selectCat(i){
-  MODE='cat'; CAT=i; Q=''; PAGE.set('sku:'+i,1); PAGE.set('supt:'+i,1);
+async function selectCat(i, keepQ){
+  MODE='cat'; CAT=i; if(!keepQ) Q=''; PAGE.set('sku:'+i,1); PAGE.set('supt:'+i,1);
   // 左侧三个下拉同步显示这个品类所属的一级/二级/三级
   const cc=SUM.cats.find(x=>x.i===i);
   if(cc){ L1=lv1Of(cc); L2=lv2Of(cc); L3=cc.leaf; }
   PRICE.set(i,[0,100]);
   renderNav(); renderCat();
+  await ensureCat(i);
+  renderCat();
   $('#catbody').classList.remove('anim'); void $('#catbody').offsetWidth; $('#catbody').classList.add('anim');
   $('#cathead').classList.remove('anim'); void $('#cathead').offsetWidth; $('#cathead').classList.add('anim');
   saveState();
@@ -1440,13 +1479,20 @@ function selectCat(i){
 /* ================= 右：品类面板 ================= */
 function curCat(){ return SUM.cats.find(c=>c.i===CAT); }
 function renderCat(){
-  if(!ROWS_READY){
-    $('#cathead').innerHTML=''; $('#cattoolbar').innerHTML='';
-    $('#catbody').innerHTML='<div class="empty">正在加载明细数据…<br><span style="font-size:12px">首次打开要下载约 1.5MB（压缩后），之后有缓存就很快</span></div>';
+  if(MODE==='search'){ renderSearch(); return; }   // 全局搜索结果模式
+  const ci=CAT;
+  if(ci!=null&&!LOADED.has(ci)){                   // 该品类明细还没到
+    const c0=SUM.cats.find(x=>x.i===ci);
+    $('#cathead').innerHTML=c0?`<div class="chead2"><div><div class="t">${esc(c0.leaf)} <span class="badge b-base">按${esc(baseWords(c0.base).long)}比</span></div>
+      <div class="m"><span><b>${c0.sups}</b> 家供应商</span><span><b>${nf(c0.rankable)}</b> 个可比规格</span></div></div>
+      <div><div class="num">${c0.min==null?'<span class="badge b-mute">暂无可比价</span>':fx(c0.min)+`<small>${esc(baseWords(c0.base).long)}</small>`}</div></div>
+      <div class="cband"></div></div>`:'';
+    $('#cattoolbar').innerHTML='';
+    $('#catbody').innerHTML='<div class="empty">正在加载该品类明细…</div>';
     $('#catfoot').innerHTML='';
+    ensureCat(ci).then(ok=>{ if(ok&&CAT===ci) renderCat(); });
     return;
   }
-  if(MODE==='search'){ renderSearch(); return; }   // 全局搜索结果模式
   const c=curCat();
   if(!c){ $('#cathead').innerHTML=''; $('#cattoolbar').innerHTML=''; $('#catbody').innerHTML='<div class="empty">请选择左侧品类</div>'; $('#catfoot').innerHTML=''; return; }
   const bw=baseWords(c.base);
@@ -1849,19 +1895,23 @@ function palRender(){
   const sups=SUM.sups.map((s,i)=>({s,i})).filter(x=>x.s.name.toLowerCase().includes(q)).slice(0,4)
     .map(({s,i})=>`<div class="pit" data-sup="${i}"><div class="tx"><div class="a">${esc(s.name)}</div><div class="b">覆盖 ${s.cats} 个品类 · ${nf(s.skus)} 个规格</div></div></div>`).join('');
   const hits=[];
-  for(let i=0;i<ROWS.rows.length&&hits.length<12;i++){
-    const r=ROWS.rows[i],P=ROWS.prods[r[0]];
-    if(String(r[1]).toLowerCase().includes(q)||String(P[0]).toLowerCase().includes(q)) hits.push(i);
+  if(SEARCH_IDX){
+    for(let i=0;i<SEARCH_IDX.length&&hits.length<12;i++){
+      const e=SEARCH_IDX[i];
+      if(String(e[0]).toLowerCase().includes(q)) hits.push(e);
+    }
   }
-  const hp=hits.map(i=>{const r=ROWS.rows[i],P=ROWS.prods[r[0]],c=SUM.cats.find(x=>x.i===P[2]),pw=pieceWord(r[1]),mq=Number(r[4])||1;
-    const lp=parseFloat(r[2])||0, pp=r[7]!=null?Number(r[7]):lp, isPack=pp>0&&pp<lp-1e-9;
-    return `<div class="pit" data-prod="${r[0]}" data-cat="${P[2]}">${imgTag(P[3],100)}<div class="tx">
-      <div class="a">${esc(r[1])}</div><div class="b">${esc(supName(P[1]))} · ${esc(c?c.leaf:'')} · ${fx(pp)}/${esc(pw)}${isPack?'（整包 '+fx(lp)+'）':''} · 起订${r[4]==null?'-':nf(r[4])} · 最少 ${fx(lp*mq)}</div></div>
-      <div class="c">${r[6]==='rank'?fx(r[5]):r[6]==='trial'?'可0元试用':'按件'}</div></div>`;}).join('');
+  const hp=hits.map(e=>{const ci=e[1], pi=e[3], c=SUM.cats.find(x=>x.i===ci);
+    return `<div class="pit" data-hit="${esc(e[0])}" data-cat="${ci}">
+      <span class="k">商品</span>
+      <div class="tx"><div class="a">${esc(e[0])}</div>
+      <div class="b">${esc(c?c.leaf:'')} · ${esc(supName(e[2]))}</div></div>
+      <div class="c">去看 ›</div></div>`;}).join('');
   $('#palres').innerHTML=(cats?`<div class="sep">品类</div>${cats}`:'')+(sups?`<div class="sep">供应商</div>${sups}`:'')
     +(hp?`<div class="sep">商品 / 规格</div>${hp}`:'')||`<div class="empty">没有找到「${esc(q)}」</div>`;
   $$('#palres .pit').forEach(el=>el.onclick=()=>{
     if(el.dataset.cat!=null){ selectCat(+el.dataset.cat); tab('cats'); }
+    if(el.dataset.hit){ Q=el.dataset.hit; }
     else if(el.dataset.sup!=null){ tab('sups'); $('#supsel').value=el.dataset.sup; renderSup(+el.dataset.sup); }
     palClose();
   });
@@ -2076,20 +2126,17 @@ function setDataStatus(txt,retry){
     return;
   }
   boot();
-  loadRows();
+  loadSearchIdx();       // 后台把搜索索引拉下来（不占首屏）
 })();
-async function loadRows(){
-  setDataStatus('正在加载明细数据…（首次约 1~3 秒）');
+async function loadSearchIdx(){
   try{
-    const b=await fetchJSON('data/site-rows.json',4);
-    ROWS=b; TRIAL=new Set(b.trialProd||[]); TAGS=new Map(b.tags||[]);
+    const r=await fetch('data/search.txt',{cache:'force-cache'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const t=await r.text();
+    SEARCH_IDX=t.split('\n').map(l=>{const p=l.split('\t');return [p[0],+p[1],+p[2],+p[3]];});
     ROWS_READY=true;
-    idx();                            // 明细到手就建索引（否则列表会是空的）
-    setDataStatus('');
-    _trialByCat=null; _ct.clear();
-    if(CURV==='cats'){ if(MODE==='search') renderSearch(); else if(curCat()) renderCat(); }
   }catch(e){
-    setDataStatus('明细数据加载失败（可能是网络不稳）：'+e.message, ()=>loadRows());
+    ROWS_READY=true;                  // 搜索索引失败也不挡浏览
   }
 }
 </script>
